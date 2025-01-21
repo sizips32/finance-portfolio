@@ -6,6 +6,7 @@ from pages.income_expense import render_income_expense_page
 from pages.budget import render_budget_page
 from pages.investments import render_investments_page
 from pages.portfolio import render_portfolio_page
+from utils.data_handler import FinanceDataHandler
 
 # 페이지 기본 설정
 st.set_page_config(
@@ -14,6 +15,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# 데이터 핸들러 초기화
+@st.cache_resource
+def get_data_handler():
+    return FinanceDataHandler()
 
 # 사이드바 네비게이션
 def sidebar_nav():
@@ -31,119 +37,104 @@ def sidebar_nav():
             menu_icon="cast",
             default_index=0,
         )
+        
+        # 데이터베이스 초기화 버튼
+        st.markdown("---")
+        if st.button("데이터베이스 초기화", type="secondary"):
+            data_handler = get_data_handler()
+            if data_handler.reset_database():
+                st.success("데이터베이스가 초기화되었습니다.")
+                st.rerun()
+            else:
+                st.error("데이터베이스 초기화 중 오류가 발생했습니다.")
+        
+        st.markdown(
+            "<small>* 초기화 시 모든 데이터가 삭제됩니다.</small>",
+            unsafe_allow_html=True
+        )
+    
     return selected
 
 # 메인 대시보드
 def main_dashboard():
     st.title("Personal Finance Dashboard")
     
-    # 샘플 데이터 생성 (실제 구현시 데이터베이스에서 가져올 예정)
+    data_handler = get_data_handler()
+    summary = data_handler.get_monthly_summary()
+    
+    # 메트릭 표시
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric(
-            label="Total Assets",
-            value="₩50,000,000",
-            delta="1,200,000",
-            help="총 자산"
+            label="이번 달 수입",
+            value=f"₩{summary['total_income']:,.0f}",
+            help="이번 달 총 수입"
         )
     with col2:
         st.metric(
-            label="Monthly Income",
-            value="₩5,000,000",
-            delta="200,000",
-            help="월간 수입"
+            label="이번 달 지출",
+            value=f"₩{summary['total_expenses']:,.0f}",
+            help="이번 달 총 지출"
         )
     with col3:
         st.metric(
-            label="Monthly Expenses",
-            value="₩3,000,000",
-            delta="-150,000",
-            help="월간 지출"
+            label="순수입",
+            value=f"₩{summary['net_income']:,.0f}",
+            delta=f"₩{summary['net_income']:,.0f}",
+            help="수입 - 지출"
         )
     
     # 자산 분배 차트
-    fig = go.Figure(data=[go.Pie(
-        labels=['주식', '채권', '현금', '부동산'],
-        values=[35, 25, 20, 20],
-        hole=.3
-    )])
-    fig.update_layout(
-        title="자산 분배 현황",
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
+    portfolio_data = data_handler.load_portfolio()
+    
+    if portfolio_data:
+        fig = go.Figure(data=[go.Pie(
+            labels=list(portfolio_data.keys()),
+            values=list(portfolio_data.values()),
+            hole=.3
+        )])
+        fig.update_layout(
+            title="자산 분배 현황",
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
         )
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("포트폴리오 데이터가 없습니다. 먼저 자산을 입력해주세요.")
     
-    # 수입/지출 트렌드
-    dates = pd.date_range(start='2024-01-01', end='2024-03-31', freq='ME')
-    income = [5000000, 5200000, 5000000]
-    expenses = [3000000, 3150000, 3000000]
+    # 수입/지출 내역
+    col1, col2 = st.columns(2)
     
-    fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(
-        x=dates,
-        y=income,
-        name="수입",
-        line=dict(color='#28a745', width=2)
-    ))
-    fig2.add_trace(go.Scatter(
-        x=dates,
-        y=expenses,
-        name="지출",
-        line=dict(color='#dc3545', width=2)
-    ))
-    fig2.update_layout(
-        title="수입/지출 트렌드",
-        xaxis_title="날짜",
-        yaxis_title="금액 (원)",
-        hovermode='x unified',
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
-    )
-    st.plotly_chart(fig2, use_container_width=True)
+    with col1:
+        st.markdown("### 📥 최근 수입")
+        income_data = data_handler.load_income()
+        if income_data:
+            income_df = pd.DataFrame(income_data)
+            st.dataframe(
+                income_df.head(),
+                use_container_width=True
+            )
+        else:
+            st.info("수입 데이터가 없습니다.")
     
-    # 최근 거래 내역
-    st.markdown("### 📋 최근 거래 내역")
-    
-    transactions = pd.DataFrame({
-        "날짜": ["2024-03-15", "2024-03-14", "2024-03-13", "2024-03-12"],
-        "구분": ["지출", "수입", "지출", "지출"],
-        "카테고리": ["식비", "급여", "교통", "여가"],
-        "금액": [-50000, 5000000, -30000, -100000],
-        "메모": ["점심식사", "3월 급여", "택시비", "영화관람"]
-    })
-    
-    # 금액에 따라 색상 지정
-    def color_amount(val):
-        color = '#28a745' if val > 0 else '#dc3545'
-        return f'color: {color}'
-    
-    # 금액 포맷팅
-    def format_amount(val):
-        return f"₩{abs(val):,.0f}"
-    
-    # 스타일이 적용된 데이터프레임 표시
-    st.dataframe(
-        transactions.style.format({
-            "금액": format_amount
-        }).map(
-            color_amount,
-            subset=["금액"]
-        ),
-        use_container_width=True
-    )
+    with col2:
+        st.markdown("### 📤 최근 지출")
+        expense_data = data_handler.load_expense()
+        if expense_data:
+            expense_df = pd.DataFrame(expense_data)
+            st.dataframe(
+                expense_df.head(),
+                use_container_width=True
+            )
+        else:
+            st.info("지출 데이터가 없습니다.")
 
 def main():
     selected = sidebar_nav()

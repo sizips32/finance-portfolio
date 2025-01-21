@@ -12,10 +12,10 @@ def render_income_expense_page():
     data_handler = FinanceDataHandler()
     
     # 탭 생성
-    tab1, tab2 = st.tabs(["💳 입력", "📊 분석"])
+    tab1, tab2 = st.tabs(["💳 입력/수정", "📊 분석"])
     
     with tab1:
-        # 입력 폼을 카드 스타일로 표시
+        # 수입/지출 입력 폼을 카드 스타일로 표시
         col1, col2 = st.columns(2)
         
         with col1:
@@ -36,9 +36,9 @@ def render_income_expense_page():
                     
                     income_amount = st.number_input(
                         "금액",
-                        min_value=0,
-                        value=0,
-                        step=10000,
+                        min_value=0.0,
+                        value=0.0,
+                        step=1000.0,
                         key="income_amount",
                         help="수입 금액을 입력하세요"
                     )
@@ -63,8 +63,86 @@ def render_income_expense_page():
                         }
                         if data_handler.save_income(income_data):
                             st.success("✅ 수입이 저장되었습니다.")
+                            st.rerun()
                         else:
                             st.error("❌ 수입 저장에 실패했습니다.")
+                
+                # 수입 내역 표시 및 수정/삭제
+                st.markdown("### 📋 수입 내역")
+                income_data = data_handler.load_income()
+                if income_data:
+                    for item in income_data:
+                        with st.expander(
+                            f"{item['date']} - {item['category']} "
+                            f"(₩{item['amount']:,})"
+                        ):
+                            with st.form(f"edit_income_{item['id']}"):
+                                edit_date = st.date_input(
+                                    "날짜",
+                                    value=datetime.strptime(
+                                        item['date'],
+                                        "%Y-%m-%d"
+                                    ),
+                                    key=f"edit_income_date_{item['id']}"
+                                )
+                                
+                                edit_category = st.selectbox(
+                                    "분류",
+                                    ["급여", "투자수익", "부수입", "기타"],
+                                    index=["급여", "투자수익", "부수입", "기타"].index(
+                                        item['category']
+                                    ),
+                                    key=f"edit_income_category_{item['id']}"
+                                )
+                                
+                                edit_amount = st.number_input(
+                                    "금액",
+                                    min_value=0.0,
+                                    value=float(item['amount']),
+                                    step=1000.0,
+                                    key=f"edit_income_amount_{item['id']}"
+                                )
+                                
+                                edit_memo = st.text_area(
+                                    "메모",
+                                    value=item['memo'],
+                                    key=f"edit_income_memo_{item['id']}"
+                                )
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.form_submit_button(
+                                        "수정",
+                                        use_container_width=True
+                                    ):
+                                        update_data = {
+                                            "date": edit_date.strftime("%Y-%m-%d"),
+                                            "category": edit_category,
+                                            "amount": edit_amount,
+                                            "memo": edit_memo
+                                        }
+                                        if data_handler.update_income(
+                                            item['id'],
+                                            update_data
+                                        ):
+                                            st.success("✅ 수정되었습니다.")
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ 수정에 실패했습니다.")
+                                
+                                with col2:
+                                    if st.form_submit_button(
+                                        "삭제",
+                                        type="secondary",
+                                        use_container_width=True
+                                    ):
+                                        if data_handler.delete_income(item['id']):
+                                            st.success("✅ 삭제되었습니다.")
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ 삭제에 실패했습니다.")
+                else:
+                    st.info("수입 내역이 없습니다.")
         
         with col2:
             with st.container():
@@ -87,9 +165,9 @@ def render_income_expense_page():
                     
                     expense_amount = st.number_input(
                         "금액",
-                        min_value=0,
-                        value=0,
-                        step=1000,
+                        min_value=0.0,
+                        value=0.0,
+                        step=1000.0,
                         key="expense_amount",
                         help="지출 금액을 입력하세요"
                     )
@@ -114,8 +192,92 @@ def render_income_expense_page():
                         }
                         if data_handler.save_expense(expense_data):
                             st.success("✅ 지출이 저장되었습니다.")
+                            st.rerun()
                         else:
                             st.error("❌ 지출 저장에 실패했습니다.")
+                
+                # 지출 내역 표시 및 수정/삭제
+                st.markdown("### 📋 지출 내역")
+                expense_data = data_handler.load_expense()
+                if expense_data:
+                    for item in expense_data:
+                        with st.expander(
+                            f"{item['date']} - {item['category']} "
+                            f"(₩{item['amount']:,})"
+                        ):
+                            with st.form(f"edit_expense_{item['id']}"):
+                                edit_date = st.date_input(
+                                    "날짜",
+                                    value=datetime.strptime(
+                                        item['date'],
+                                        "%Y-%m-%d"
+                                    ),
+                                    key=f"edit_expense_date_{item['id']}"
+                                )
+                                
+                                edit_category = st.selectbox(
+                                    "분류",
+                                    [
+                                        "식비", "교통", "주거", "통신",
+                                        "의료", "교육", "여가", "기타"
+                                    ],
+                                    index=[
+                                        "식비", "교통", "주거", "통신",
+                                        "의료", "교육", "여가", "기타"
+                                    ].index(item['category']),
+                                    key=f"edit_expense_category_{item['id']}"
+                                )
+                                
+                                edit_amount = st.number_input(
+                                    "금액",
+                                    min_value=0.0,
+                                    value=float(item['amount']),
+                                    step=1000.0,
+                                    key=f"edit_expense_amount_{item['id']}"
+                                )
+                                
+                                edit_memo = st.text_area(
+                                    "메모",
+                                    value=item['memo'],
+                                    key=f"edit_expense_memo_{item['id']}"
+                                )
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.form_submit_button(
+                                        "수정",
+                                        use_container_width=True
+                                    ):
+                                        update_data = {
+                                            "date": edit_date.strftime("%Y-%m-%d"),
+                                            "category": edit_category,
+                                            "amount": edit_amount,
+                                            "memo": edit_memo
+                                        }
+                                        if data_handler.update_expense(
+                                            item['id'],
+                                            update_data
+                                        ):
+                                            st.success("✅ 수정되었습니다.")
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ 수정에 실패했습니다.")
+                                
+                                with col2:
+                                    if st.form_submit_button(
+                                        "삭제",
+                                        type="secondary",
+                                        use_container_width=True
+                                    ):
+                                        if data_handler.delete_expense(
+                                            item['id']
+                                        ):
+                                            st.success("✅ 삭제되었습니다.")
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ 삭제에 실패했습니다.")
+                else:
+                    st.info("지출 내역이 없습니다.")
     
     with tab2:
         st.markdown("### 📈 수입/지출 분석")
@@ -125,7 +287,7 @@ def render_income_expense_page():
         with col1:
             start_date = st.date_input(
                 "시작일",
-                value=datetime.now() - timedelta(days=30)
+                value=datetime.now().replace(day=1)
             )
         with col2:
             end_date = st.date_input(
@@ -134,8 +296,14 @@ def render_income_expense_page():
             )
         
         # 데이터 로드
-        income_data = data_handler.load_income()
-        expense_data = data_handler.load_expense()
+        income_data = data_handler.load_income(
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d")
+        )
+        expense_data = data_handler.load_expense(
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d")
+        )
         
         if income_data and expense_data:
             # 데이터프레임 생성
@@ -174,14 +342,13 @@ def render_income_expense_page():
             st.markdown("### 📊 차트 분석")
             
             # 수입/지출 트렌드
-            dates = pd.date_range(start=start_date, end=end_date)
-            income_series = income_df.groupby("date")["amount"].sum()
-            expense_series = expense_df.groupby("date")["amount"].sum()
+            income_by_date = income_df.groupby("date")["amount"].sum()
+            expense_by_date = expense_df.groupby("date")["amount"].sum()
             
             trend_chart = create_income_expense_chart(
-                dates=dates,
-                income=income_series.values,
-                expenses=expense_series.values
+                dates=pd.date_range(start=start_date, end=end_date),
+                income=income_by_date.values,
+                expenses=expense_by_date.values
             )
             st.plotly_chart(trend_chart, use_container_width=True)
             
