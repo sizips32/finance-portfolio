@@ -297,7 +297,7 @@ def render_investments_page():
                                     edit_current_rate = st.number_input(
                                         "현재 환율",
                                         min_value=0.0,
-                                        value=float(investment.get('current_exchange_rate', 1300.0)),
+                                        value=get_exchange_rate() or float(investment.get('current_exchange_rate', 1300.0)),
                                         step=0.01,
                                         key=f"edit_current_rate_{investment_id}"
                                     )
@@ -509,6 +509,7 @@ def render_investment_form():
             current_rate = st.number_input(
                 "현재 환율",
                 min_value=0.0,
+                value=get_exchange_rate() or 1300.0,
                 step=0.01,
                 help="외화 자산인 경우 현재 환율을 입력하세요",
                 key="current_rate"
