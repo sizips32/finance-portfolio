@@ -214,6 +214,35 @@ def calculate_krw_amount(amount: float, currency: str, exchange_rate: float) -> 
     return amount
 
 
+def find_optimal_return(returns: pd.DataFrame) -> float:
+    """효율적 투자선에서 최적의 수익률 찾기"""
+    n_assets = returns.shape[1]
+    mean_returns = returns.mean() * 252  # 연간 수익률
+    
+    # 최소-최대 수익률 범위 계산
+    min_return = mean_returns.min()
+    max_return = mean_returns.max()
+    
+    # 50개 지점에서 포트폴리오 최적화 시도
+    test_returns = np.linspace(min_return, max_return, 50)
+    best_sharpe = -np.inf
+    optimal_return = None
+    
+    for test_return in test_returns:
+        try:
+            result = optimize_portfolio(returns, test_return)
+            if result:
+                # Sharpe ratio 계산 (무위험 수익률 2% 가정)
+                sharpe = (result['expected_return'] - 0.02) / result['risk']
+                if sharpe > best_sharpe:
+                    best_sharpe = sharpe
+                    optimal_return = test_return
+        except:
+            continue
+    
+    return optimal_return if optimal_return is not None else (min_return + max_return) / 2
+
+
 def render_portfolio_page():
     st.title("💼 포트폴리오 관리")
     
@@ -695,15 +724,6 @@ def render_portfolio_page():
                 help="과거 데이터 분석 기간을 선택하세요"
             )
             
-            target_return = st.slider(
-                "목표 연간 수익률",
-                min_value=0.0,
-                max_value=30.0,
-                value=10.0,
-                step=0.5,
-                help="원하는 연간 목표 수익률을 설정하세요"
-            ) / 100
-            
             if st.button("포트폴리오 최적화 실행"):
                 with st.spinner("시장 데이터를 가져오는 중..."):
                     # 종목 코드 추출
@@ -722,29 +742,35 @@ def render_portfolio_page():
                         )
                         
                         if returns is not None and not returns.empty:
+                            # 수익률 범위 계산
+                            mean_returns = returns.mean() * 252
+                            min_return = mean_returns.min()
+                            max_return = mean_returns.max()
+                            
+                            # 최적 수익률 계산
+                            optimal_return = find_optimal_return(returns)
+                            
+                            # 목표 수익률 슬라이더 (범위와 기본값 자동 설정)
+                            target_return = st.slider(
+                                "목표 연간 수익률",
+                                min_value=float(min_return*100),
+                                max_value=float(max_return*100),
+                                value=float(optimal_return*100),
+                                step=0.5,
+                                help="원하는 연간 목표 수익률을 설정하세요"
+                            ) / 100
+                            
                             # 최적화 실행
-                            optimization_result = optimize_portfolio(
-                                returns,
-                                target_return
-                            )
+                            optimization_result = optimize_portfolio(returns, target_return)
                             
                             if optimization_result:
                                 st.markdown("#### 최적화 결과")
                                 
                                 # 결과 표시
                                 result_df = pd.DataFrame({
-                                    '자산': list(
-                                        optimization_result['weights'].keys()
-                                    ),
-                                    '최적 비중': [
-                                        f"{w*100:.1f}%"
-                                        for w in optimization_result[
-                                            'weights'
-                                        ].values()
-                                    ],
-                                    '현재 비중': current_weights[
-                                        investments_df['symbol'].isin(symbols)
-                                    ].map(lambda x: f"{x*100:.1f}%")
+                                    '자산': list(optimization_result['weights'].keys()),
+                                    '최적 비중': [f"{w*100:.1f}%" for w in optimization_result['weights'].values()],
+                                    '현재 비중': current_weights[investments_df['symbol'].isin(symbols)].map(lambda x: f"{x*100:.1f}%")
                                 })
                                 
                                 st.dataframe(result_df)
@@ -762,6 +788,12 @@ def render_portfolio_page():
                                         f"{optimization_result['risk']*100:.1f}%"
                                     )
                                 
+                                # 수익률 범위와 추천 표시
+                                st.markdown("#### 📈 수익률 분석")
+                                st.write(f"- 최소 가능 수익률: {min_return*100:.1f}%")
+                                st.write(f"- 최대 가능 수익률: {max_return*100:.1f}%")
+                                st.write(f"- 추천 목표 수익률: {optimal_return*100:.1f}%")
+                                
                                 # 상관관계 분석
                                 st.markdown("#### 자산 간 상관관계")
                                 corr_matrix = returns.corr()
@@ -775,12 +807,8 @@ def render_portfolio_page():
                                 
                                 # 리밸런싱 제안
                                 st.markdown("#### 📋 리밸런싱 제안")
-                                for asset, opt_weight in optimization_result[
-                                    'weights'
-                                ].items():
-                                    current_w = current_weights[
-                                        investments_df['symbol'] == asset
-                                    ].iloc[0]
+                                for asset, opt_weight in optimization_result['weights'].items():
+                                    current_w = current_weights[investments_df['symbol'] == asset].iloc[0]
                                     diff = (opt_weight - current_w) * 100
                                     if abs(diff) >= 1:  # 1% 이상 차이나는 경우만 표시
                                         action = "매수" if diff > 0 else "매도"
