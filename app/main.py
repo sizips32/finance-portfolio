@@ -17,9 +17,11 @@ st.set_page_config(
 )
 
 # 데이터 핸들러 초기화
-@st.cache_resource
-def get_data_handler():
-    return FinanceDataHandler()
+def get_data_handler() -> FinanceDataHandler:
+    """데이터 핸들러 인스턴스 반환"""
+    if 'data_handler' not in st.session_state:
+        st.session_state.data_handler = FinanceDataHandler()
+    return st.session_state.data_handler
 
 # 사이드바 네비게이션
 def sidebar_nav():
@@ -36,21 +38,6 @@ def sidebar_nav():
             ],
             menu_icon="cast",
             default_index=0,
-        )
-        
-        # 데이터베이스 초기화 버튼
-        st.markdown("---")
-        if st.button("데이터베이스 초기화", type="secondary"):
-            data_handler = get_data_handler()
-            if data_handler.reset_database():
-                st.success("데이터베이스가 초기화되었습니다.")
-                st.rerun()
-            else:
-                st.error("데이터베이스 초기화 중 오류가 발생했습니다.")
-        
-        st.markdown(
-            "<small>* 초기화 시 모든 데이터가 삭제됩니다.</small>",
-            unsafe_allow_html=True
         )
     
     return selected
@@ -78,12 +65,19 @@ def main_dashboard():
             help="이번 달 총 지출"
         )
     with col3:
+        net_income = summary['net_income']
         st.metric(
             label="순수입",
-            value=f"₩{summary['net_income']:,.0f}",
-            delta=f"₩{summary['net_income']:,.0f}",
-            help="수입 - 지출"
+            value=f"₩{net_income:,.0f}",
+            help="이번 달 수입 - 지출"
         )
+        # 순수입이 양수/음수인 경우에 따라 다른 아이콘 표시
+        if net_income > 0:
+            st.markdown("📈 흑자")
+        elif net_income < 0:
+            st.markdown("📉 적자")
+        else:
+            st.markdown("➖ 수지균형")
     
     # 자산 분배 차트
     portfolio_data = data_handler.load_portfolio()

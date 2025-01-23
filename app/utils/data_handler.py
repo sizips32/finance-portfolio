@@ -1,5 +1,4 @@
 import sqlite3
-import json
 from datetime import datetime
 import os
 
@@ -8,20 +7,7 @@ class FinanceDataHandler:
     def __init__(self):
         self.db_path = "app/data/finance.db"
         self._init_database()
-    
-    def reset_database(self):
-        """데이터베이스 초기화"""
-        try:
-            # 기존 데이터베이스 파일 삭제
-            if os.path.exists(self.db_path):
-                os.remove(self.db_path)
-            
-            # 데이터베이스 재생성
-            self._init_database()
-            return True
-        except Exception as e:
-            print(f"Error resetting database: {e}")
-            return False
+        self._migrate_database()
     
     def _init_database(self):
         """데이터베이스 및 테이블 초기화"""
@@ -73,7 +59,14 @@ class FinanceDataHandler:
                 type TEXT NOT NULL,
                 symbol TEXT,
                 name TEXT NOT NULL,
+                purchase_quantity REAL,
+                purchase_price REAL,
+                current_price REAL,
+                currency TEXT DEFAULT 'KRW',
                 amount REAL NOT NULL,
+                current_amount REAL,
+                purchase_exchange_rate REAL,
+                current_exchange_rate REAL,
                 purchase_date TEXT NOT NULL,
                 memo TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -86,13 +79,60 @@ class FinanceDataHandler:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 asset_type TEXT NOT NULL,
                 amount REAL NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(asset_type)
             )
         """)
         
         conn.commit()
         conn.close()
+    
+    def _migrate_database(self):
+        """데이터베이스 마이그레이션"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # investment 테이블 마이그레이션
+            cursor.execute("PRAGMA table_info(investment)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            # updated_at 컬럼 추가
+            if 'updated_at' not in columns:
+                cursor.execute("""
+                    ALTER TABLE investment
+                    ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                """)
+            
+            # portfolio 테이블 마이그레이션
+            cursor.execute("PRAGMA table_info(portfolio)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            # currency 컬럼 추가
+            if 'currency' not in columns:
+                cursor.execute("""
+                    ALTER TABLE portfolio
+                    ADD COLUMN currency TEXT DEFAULT 'KRW'
+                """)
+            
+            # purchase_exchange_rate 컬럼 추가
+            if 'purchase_exchange_rate' not in columns:
+                cursor.execute("""
+                    ALTER TABLE portfolio
+                    ADD COLUMN purchase_exchange_rate REAL
+                """)
+            
+            # updated_at 컬럼 추가
+            if 'updated_at' not in columns:
+                cursor.execute("""
+                    ALTER TABLE portfolio
+                    ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                """)
+            
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error migrating database: {e}")
     
     def save_income(self, data: dict) -> bool:
         """수입 데이터 저장"""
@@ -167,24 +207,75 @@ class FinanceDataHandler:
             return False
     
     def save_investment(self, data: dict) -> bool:
-        """투자 데이터 저장"""
+        """투자 데이터 저장 또는 업데이트"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
+            # 동일한 종목이 있는지 확인
             cursor.execute("""
-                INSERT INTO investment (
-                    type, symbol, name, amount, purchase_date, memo
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                data["type"],
-                data.get("symbol", ""),
-                data["name"],
-                data["amount"],
-                data["purchase_date"],
-                data.get("memo", "")
-            ))
+                SELECT id FROM investment
+                WHERE symbol = ? AND type = ?
+            """, (data.get("symbol", ""), data["type"]))
+            
+            existing_id = cursor.fetchone()
+            
+            if existing_id:
+                # 기존 데이터 업데이트
+                cursor.execute("""
+                    UPDATE investment SET
+                        name = ?,
+                        purchase_quantity = ?,
+                        purchase_price = ?,
+                        current_price = ?,
+                        currency = ?,
+                        amount = ?,
+                        current_amount = ?,
+                        purchase_exchange_rate = ?,
+                        current_exchange_rate = ?,
+                        purchase_date = ?,
+                        memo = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (
+                    data["name"],
+                    data.get("purchase_quantity", 0),
+                    data.get("purchase_price", 0),
+                    data.get("current_price", 0),
+                    data.get("currency", "KRW"),
+                    data["amount"],
+                    data.get("current_amount", data["amount"]),
+                    data.get("purchase_exchange_rate", None),
+                    data.get("current_exchange_rate", None),
+                    data["purchase_date"],
+                    data.get("memo", ""),
+                    existing_id[0]
+                ))
+            else:
+                # 새로운 데이터 추가
+                cursor.execute("""
+                    INSERT INTO investment (
+                        type, symbol, name, purchase_quantity, purchase_price,
+                        current_price, currency, amount, current_amount,
+                        purchase_exchange_rate, current_exchange_rate,
+                        purchase_date, memo
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    data["type"],
+                    data.get("symbol", ""),
+                    data["name"],
+                    data.get("purchase_quantity", 0),
+                    data.get("purchase_price", 0),
+                    data.get("current_price", 0),
+                    data.get("currency", "KRW"),
+                    data["amount"],
+                    data.get("current_amount", data["amount"]),
+                    data.get("purchase_exchange_rate", None),
+                    data.get("current_exchange_rate", None),
+                    data["purchase_date"],
+                    data.get("memo", "")
+                ))
             
             conn.commit()
             conn.close()
@@ -199,13 +290,19 @@ class FinanceDataHandler:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            for asset_type, amount in data.items():
+            for asset_type, asset_data in data.items():
                 cursor.execute("""
                     INSERT OR REPLACE INTO portfolio (
-                        asset_type, amount, updated_at
+                        asset_type, currency, amount,
+                        purchase_exchange_rate, updated_at
                     )
-                    VALUES (?, ?, CURRENT_TIMESTAMP)
-                """, (asset_type, amount))
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (
+                    asset_type,
+                    asset_data.get('currency', 'KRW'),
+                    asset_data['amount'],
+                    asset_data.get('purchase_exchange_rate', None)
+                ))
             
             conn.commit()
             conn.close()
@@ -327,13 +424,24 @@ class FinanceDataHandler:
             cursor.execute("""
                 UPDATE investment
                 SET type = ?, symbol = ?, name = ?, 
-                    amount = ?, purchase_date = ?, memo = ?
+                    purchase_quantity = ?, purchase_price = ?,
+                    current_price = ?, currency = ?, 
+                    amount = ?, current_amount = ?,
+                    purchase_exchange_rate = ?, current_exchange_rate = ?,
+                    purchase_date = ?, memo = ?
                 WHERE id = ?
             """, (
                 data["type"],
                 data.get("symbol", ""),
                 data["name"],
+                data.get("purchase_quantity", 0),
+                data.get("purchase_price", 0),
+                data.get("current_price", 0),
+                data.get("currency", "KRW"),
                 data["amount"],
+                data.get("current_amount", data["amount"]),
+                data.get("purchase_exchange_rate", None),
+                data.get("current_exchange_rate", None),
                 data["purchase_date"],
                 data.get("memo", ""),
                 id
@@ -344,6 +452,32 @@ class FinanceDataHandler:
             return True
         except Exception as e:
             print(f"Error updating investment: {e}")
+            return False
+    
+    def update_investment_price(
+        self,
+        id: int,
+        current_price: float,
+        current_amount: float
+    ) -> bool:
+        """투자 자산의 현재 가격 업데이트"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                UPDATE investment SET
+                    current_price = ?,
+                    current_amount = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (current_price, current_amount, id))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error updating investment price: {e}")
             return False
     
     def load_income(self, start_date=None, end_date=None) -> list:
@@ -457,27 +591,33 @@ class FinanceDataHandler:
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT id, type, symbol, name, amount, purchase_date, memo
+                SELECT 
+                    id, type, symbol, name, purchase_quantity,
+                    purchase_price, current_price, currency,
+                    amount, current_amount, purchase_exchange_rate,
+                    current_exchange_rate, purchase_date, memo,
+                    created_at, updated_at
                 FROM investment
-                ORDER BY purchase_date DESC
+                ORDER BY type, name
             """)
-            rows = cursor.fetchall()
+            
+            columns = [
+                'id', 'type', 'symbol', 'name', 'purchase_quantity',
+                'purchase_price', 'current_price', 'currency',
+                'amount', 'current_amount', 'purchase_exchange_rate',
+                'current_exchange_rate', 'purchase_date', 'memo',
+                'created_at', 'updated_at'
+            ]
             
             result = {}
-            for row in rows:
-                result[row[0]] = {
-                    "type": row[1],
-                    "symbol": row[2],
-                    "name": row[3],
-                    "amount": row[4],
-                    "purchase_date": row[5],
-                    "memo": row[6]
-                }
+            for row in cursor.fetchall():
+                data = dict(zip(columns, row))
+                result[str(data['id'])] = data
             
             conn.close()
             return result
         except Exception as e:
-            print(f"Error loading investment: {e}")
+            print(f"Error loading investment data: {e}")
             return {}
     
     def load_portfolio(self) -> dict:
@@ -487,20 +627,27 @@ class FinanceDataHandler:
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT asset_type, amount
+                SELECT 
+                    asset_type, currency, amount,
+                    purchase_exchange_rate, updated_at
                 FROM portfolio
                 ORDER BY asset_type
             """)
-            rows = cursor.fetchall()
             
             result = {}
-            for row in rows:
-                result[row[0]] = row[1]
+            for row in cursor.fetchall():
+                asset_type, currency, amount, exchange_rate, updated_at = row
+                result[asset_type] = {
+                    'currency': currency,
+                    'amount': amount,
+                    'purchase_exchange_rate': exchange_rate,
+                    'updated_at': updated_at
+                }
             
             conn.close()
             return result
         except Exception as e:
-            print(f"Error loading portfolio: {e}")
+            print(f"Error loading portfolio data: {e}")
             return {}
 
     def get_monthly_summary(self, year_month: str = None) -> dict:
