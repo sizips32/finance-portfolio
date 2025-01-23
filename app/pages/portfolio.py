@@ -125,37 +125,58 @@ def calculate_portfolio_risk(returns: pd.DataFrame, weights: np.array) -> float:
 
 def optimize_portfolio(returns: pd.DataFrame, target_return: float = None) -> dict:
     """포트폴리오 최적화"""
-    n_assets = returns.shape[1]
-    
-    # 초기 가중치 설정
-    init_weights = np.array([1/n_assets] * n_assets)
-    
-    # 제약조건 설정
-    bounds = tuple((0, 1) for _ in range(n_assets))
-    constraints = [
-        {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}  # 가중치 합 = 1
-    ]
-    
-    if target_return is not None:
-        mean_returns = returns.mean() * 252  # 연간 수익률
-        constraints.append({
-            'type': 'eq',
-            'fun': lambda x: np.sum(mean_returns * x) - target_return
-        })
-    
-    # 최적화
-    result = minimize(
-        lambda w: calculate_portfolio_risk(returns, w),
-        init_weights,
-        method='SLSQP',
-        bounds=bounds,
-        constraints=constraints
-    )
-    
-    if result.success:
+    try:
+        n_assets = returns.shape[1]
+        
+        # 연간 수익률 계산
+        mean_returns = returns.mean() * 252
+        min_return = mean_returns.min()
+        max_return = mean_returns.max()
+        
+        # 목표 수익률 검증
+        if target_return is not None:
+            if target_return < min_return:
+                raise ValueError(
+                    f"목표 수익률({target_return:.1%})이 최소 가능 수익률({min_return:.1%})보다 낮습니다."
+                )
+            if target_return > max_return:
+                raise ValueError(
+                    f"목표 수익률({target_return:.1%})이 최대 가능 수익률({max_return:.1%})보다 높습니다."
+                )
+        
+        # 초기 가중치 설정 (동일 비중)
+        init_weights = np.array([1/n_assets] * n_assets)
+        
+        # 제약조건 설정
+        bounds = tuple((0, 1) for _ in range(n_assets))  # 각 자산 비중 0~100%
+        constraints = [
+            {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}  # 비중 합 = 1
+        ]
+        
+        if target_return is not None:
+            constraints.append({
+                'type': 'eq',
+                'fun': lambda x: np.sum(mean_returns * x) - target_return
+            })
+        
+        # 최적화 실행
+        result = minimize(
+            lambda w: calculate_portfolio_risk(returns, w),
+            init_weights,
+            method='SLSQP',
+            bounds=bounds,
+            constraints=constraints,
+            options={'maxiter': 1000}
+        )
+        
+        if not result.success:
+            raise ValueError(
+                f"최적화 실패: {result.message}\n"
+                f"가능한 수익률 범위: {min_return:.1%} ~ {max_return:.1%}"
+            )
+        
         optimized_weights = result.x
         optimized_risk = calculate_portfolio_risk(returns, optimized_weights)
-        mean_returns = returns.mean() * 252
         expected_return = np.sum(mean_returns * optimized_weights)
         
         return {
@@ -163,7 +184,9 @@ def optimize_portfolio(returns: pd.DataFrame, target_return: float = None) -> di
             'risk': optimized_risk,
             'expected_return': expected_return
         }
-    return None
+    except Exception as e:
+        st.error(str(e))
+        return None
 
 
 def calculate_investment_metrics(data: dict, exchange_rate: float) -> dict:
@@ -697,9 +720,9 @@ def render_portfolio_page():
             
             target_return = st.slider(
                 "목표 연간 수익률",
-                min_value=0.0,
-                max_value=30.0,
-                value=10.0,
+                min_value=float(min_return * 100),  # 최소 가능 수익률
+                max_value=float(max_return * 100),  # 최대 가능 수익률
+                value=float((min_return + max_return) * 50),  # 중간값으로 기본값 설정
                 step=0.5,
                 help="원하는 연간 목표 수익률을 설정하세요"
             ) / 100
