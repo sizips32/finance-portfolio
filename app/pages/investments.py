@@ -53,150 +53,7 @@ def render_investments_page():
     with tab1:
         st.markdown("### 투자 포트폴리오 입력")
         
-        with st.form("investment_form"):
-            # 투자 종목 입력
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                investment_type = st.selectbox(
-                    "투자 유형",
-                    [
-                        "주식", "채권", "펀드",
-                        "현금성 자산", "암호화폐", "원자재",
-                        "Gold", "기타"
-                    ]
-                )
-                
-                symbol = st.text_input(
-                    "종목 코드 (주식/암호화폐)",
-                    help="예: 005930.KS (삼성전자), BTC-USD (비트코인)"
-                )
-            
-            with col2:
-                investment_name = st.text_input(
-                    "투자 상품명",
-                    help="투자 상품의 이름을 입력하세요"
-                )
-                
-                purchase_quantity = st.number_input(
-                    "매입수량",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    help="매입한 수량을 입력하세요"
-                )
-            
-            col3, col4 = st.columns(2)
-            with col3:
-                currency = st.selectbox(
-                    "통화",
-                    ["KRW", "USD"],
-                    help="매수가의 통화 단위를 선택하세요"
-                )
-                
-                purchase_price = st.number_input(
-                    f"매수가 ({currency})",
-                    min_value=0.0,
-                    value=0.0,
-                    step=0.01,
-                    help="주당 매수 가격을 입력하세요",
-                    format="%0.2f"
-                )
-                
-                current_price = st.number_input(
-                    f"현재가 ({currency})",
-                    min_value=0.0,
-                    value=0.0,
-                    step=0.01,
-                    help="현재 주당 가격을 입력하세요",
-                    format="%0.2f"
-                )
-                
-                if currency == "USD":
-                    purchase_exchange_rate = st.number_input(
-                        "매입 시 환율 (USD/KRW)",
-                        min_value=0.0,
-                        value=1300.0,
-                        step=0.1,
-                        help="매입 당시의 USD/KRW 환율을 입력하세요",
-                        format="%0.1f"
-                    )
-                    
-                    current_exchange_rate = st.number_input(
-                        "현재 환율 (USD/KRW)",
-                        min_value=0.0,
-                        value=1300.0,
-                        step=0.1,
-                        help="현재 USD/KRW 환율을 입력하세요",
-                        format="%0.1f"
-                    )
-                
-                # 매입금액 직접 입력
-                currency_symbol = "₩" if currency == "KRW" else "$"
-                investment_amount = st.number_input(
-                    "매입금액",
-                    min_value=0.0,
-                    value=0.0,
-                    step=1000.0,
-                    help="총 매입금액을 입력하세요",
-                    format="%0.2f"
-                )
-                
-                # 평가금액 직접 입력
-                current_amount = st.number_input(
-                    "평가금액",
-                    min_value=0.0,
-                    value=0.0,
-                    step=1000.0,
-                    help="현재 평가금액을 입력하세요",
-                    format="%0.2f"
-                )
-                st.caption(f"현재 평가금액: {currency_symbol}{current_amount:,.2f}")
-            
-            with col4:
-                purchase_date = st.date_input(
-                    "매수일",
-                    value=datetime.now(),
-                    help="투자 시작일을 선택하세요"
-                )
-            
-            investment_memo = st.text_area(
-                "메모",
-                height=100,
-                help="투자와 관련된 메모를 입력하세요"
-            )
-            
-            submit_investment = st.form_submit_button(
-                "투자 정보 저장",
-                use_container_width=True
-            )
-            
-            if submit_investment:
-                investment_data = {
-                    "type": investment_type,
-                    "symbol": symbol,
-                    "name": investment_name,
-                    "purchase_quantity": purchase_quantity,
-                    "purchase_price": purchase_price,
-                    "current_price": current_price,
-                    "currency": currency,
-                    "amount": investment_amount,
-                    "current_amount": current_amount,
-                    "purchase_date": purchase_date.strftime("%Y-%m-%d"),
-                    "memo": investment_memo
-                }
-                
-                if currency == "USD":
-                    investment_data.update({
-                        "purchase_exchange_rate": purchase_exchange_rate,
-                        "current_exchange_rate": current_exchange_rate
-                    })
-                
-                if data_handler.save_investment(investment_data):
-                    st.success("✅ 투자 정보가 저장되었습니다.")
-                    st.rerun()
-                else:
-                    st.error("❌ 투자 정보 저장에 실패했습니다.")
+        render_investment_form()
     
     with tab2:
         st.markdown("### 포트폴리오 성과 분석")
@@ -252,298 +109,249 @@ def render_investments_page():
             
             # 투자 유형별 분포 (원화 환산 기준)
             type_distribution = {}
+            total_krw_value = 0
+            
+            # 먼저 전체 원화 가치 계산
             for item in investment_data.values():
-                investment_amount = float(item.get("amount", 0))
-                currency = item.get("currency", "KRW")
+                current_amount = float(item.get('current_amount', 0))
+                currency = item.get('currency', 'KRW')
                 
-                if currency == "USD":
-                    # USD 자산의 경우 현재 환율로 원화 환산
-                    current_rate = float(item.get("current_exchange_rate", 1300.0))
-                    krw_amount = investment_amount * current_rate
+                if currency != "KRW":
+                    # 외화 자산의 경우 현재 환율로 원화 환산
+                    current_rate = float(item.get('current_exchange_rate', 1300.0))
+                    krw_value = current_amount * current_rate
                 else:
-                    krw_amount = investment_amount
+                    krw_value = current_amount
                 
-                type_distribution[item["type"]] = type_distribution.get(
-                    item["type"], 0
-                ) + krw_amount
+                total_krw_value += krw_value
+                
+                # 유형별 합계 계산
+                inv_type = item.get('type', '기타')
+                type_distribution[inv_type] = type_distribution.get(inv_type, 0) + krw_value
             
-            # 파이 차트 생성
-            st.markdown("#### 투자 유형별 분포")
-            pie_chart = create_pie_chart(
-                labels=list(type_distribution.keys()),
-                values=list(type_distribution.values()),
-                title="자산 유형별 분포"
-            )
-            st.plotly_chart(pie_chart, use_container_width=True)
+            # 비중 계산 및 파이 차트 데이터 준비
+            if total_krw_value > 0:
+                labels = []
+                values = []
+                percentages = []
+                
+                for inv_type, krw_amount in type_distribution.items():
+                    percentage = (krw_amount / total_krw_value) * 100
+                    labels.append(inv_type)
+                    values.append(krw_amount)
+                    percentages.append(percentage)
+                
+                # 파이 차트 생성
+                st.markdown("#### 📊 투자 유형별 분포")
+                
+                # 비중 표시
+                cols = st.columns(len(labels))
+                for i, (label, percentage) in enumerate(zip(labels, percentages)):
+                    with cols[i]:
+                        st.metric(
+                            label,
+                            f"{percentage:.1f}%",
+                            help=f"총 {values[i]:,.0f} KRW"
+                        )
+                
+                pie_chart = create_pie_chart(
+                    labels=labels,
+                    values=values,
+                    title="자산 유형별 분포 (원화 환산 기준)"
+                )
+                st.plotly_chart(pie_chart, use_container_width=True)
             
-            # 주식 투자 성과 분석
-            st.markdown("### 📈 주식 투자 성과")
+            # 투자 목록 표시
+            st.markdown("### 📋 투자 목록")
             
-            stock_investments = [
-                item for item in investment_data.values()
-                if item["type"] == "주식" and item["symbol"]
-            ]
-            
-            if stock_investments:
-                for investment_id, investment in investment_data.items():
-                    with st.container():
-                        col_title, col_actions = st.columns([3, 1])
+            for investment_id, investment in investment_data.items():
+                with st.expander(f"{investment['name']} ({investment['type']})"):
+                    col_info, col_actions = st.columns([3, 1])
+                    
+                    with col_info:
+                        # 투자 정보 표시
+                        currency_symbol = "₩" if investment['currency'] == "KRW" else "$"
+                        amount = float(investment['amount'])
+                        current_amount = float(investment.get('current_amount', amount))
+                        returns = ((current_amount - amount) / amount * 100) if amount > 0 else 0
                         
-                        with col_title:
-                            st.markdown(
-                                f"#### {investment['name']} "
-                                f"({investment['symbol']})"
+                        info_cols = st.columns(3)
+                        with info_cols[0]:
+                            st.metric(
+                                "💰 매입금액",
+                                f"{currency_symbol}{amount:,.2f}",
+                                help="투자 시점의 매입금액"
                             )
+                        with info_cols[1]:
+                            st.metric(
+                                "💵 평가금액",
+                                f"{currency_symbol}{current_amount:,.2f}",
+                                help="현재 평가금액"
+                            )
+                        with info_cols[2]:
+                            st.metric(
+                                "📈 수익률",
+                                f"{returns:,.1f}%",
+                                help="투자 수익률"
+                            )
+                    
+                    with col_actions:
+                        action_cols = st.columns(2)
+                        with action_cols[0]:
+                            if st.button("📝", key=f"edit_{investment_id}", help="투자 정보 수정"):
+                                st.session_state.edit_investment = investment
+                                st.session_state.edit_investment_id = investment_id
+                                st.session_state.show_edit_form = True
                         
-                        with col_actions:
-                            col_edit, col_delete = st.columns(2)
-                            with col_edit:
-                                if st.button("📝", key=f"edit_{investment_id}", help="투자 정보 수정"):
-                                    st.session_state.edit_investment = investment
-                                    st.session_state.edit_investment_id = investment_id
-                                    st.session_state.show_edit_form = True
-                            
-                            with col_delete:
-                                if st.button("🗑️", key=f"delete_{investment_id}", help="투자 정보 삭제"):
-                                    if data_handler.delete_investment(investment_id):
-                                        st.success("✅ 투자 정보가 삭제되었습니다.")
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ 투자 정보 삭제에 실패했습니다.")
+                        with action_cols[1]:
+                            if st.button("🗑️", key=f"delete_{investment_id}", help="투자 정보 삭제"):
+                                if data_handler.delete_investment(investment_id):
+                                    st.success("✅ 투자 정보가 삭제되었습니다.")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 투자 정보 삭제에 실패했습니다.")
+                    
+                    # 수정 폼 표시
+                    if (hasattr(st.session_state, 'show_edit_form') and 
+                        st.session_state.show_edit_form and 
+                        st.session_state.edit_investment_id == investment_id):
                         
-                        # 수정 폼 표시
-                        if (hasattr(st.session_state, 'show_edit_form') and 
-                            st.session_state.show_edit_form and 
-                            st.session_state.edit_investment_id == investment_id):
+                        with st.form(key=f"edit_form_{investment_id}"):
+                            st.markdown("### ✏️ 투자 정보 수정")
                             
-                            with st.form(key=f"edit_form_{investment_id}"):
-                                st.markdown("### 투자 정보 수정")
-                                
-                                edit_type = st.selectbox(
-                                    "투자 유형",
-                                    [
-                                        "주식", "채권", "펀드",
-                                        "현금성 자산", "암호화폐", "원자재",
-                                        "Gold", "기타"
-                                    ],
-                                    index=["주식", "채권", "펀드", "현금성 자산", "암호화폐", "원자재", "Gold", "기타"].index(
-                                        st.session_state.edit_investment['type']
-                                    ),
-                                    key=f"edit_type_{investment_id}"
-                                )
-                                
-                                edit_symbol = st.text_input(
-                                    "종목 코드",
-                                    value=st.session_state.edit_investment['symbol'],
-                                    key=f"edit_symbol_{investment_id}"
-                                )
-                                
-                                edit_name = st.text_input(
-                                    "투자 상품명",
-                                    value=st.session_state.edit_investment['name'],
-                                    key=f"edit_name_{investment_id}"
-                                )
-                                
+                            edit_type = st.selectbox(
+                                "투자 유형",
+                                [
+                                    "주식", "채권", "펀드", "현금성",
+                                    "대체투자", "Gold", "원자재", "기타"
+                                ],
+                                index=[
+                                    "주식", "채권", "펀드", "현금성",
+                                    "대체투자", "Gold", "원자재", "기타"
+                                ].index(investment['type']),
+                                key=f"edit_type_{investment_id}"
+                            )
+                            
+                            edit_name = st.text_input(
+                                "상품명",
+                                value=investment['name'],
+                                key=f"edit_name_{investment_id}"
+                            )
+                            
+                            edit_symbol = st.text_input(
+                                "종목 코드",
+                                value=investment.get('symbol', ''),
+                                key=f"edit_symbol_{investment_id}"
+                            )
+                            
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
                                 edit_quantity = st.number_input(
-                                    "매입수량",
-                                    min_value=0,
-                                    value=int(st.session_state.edit_investment.get('purchase_quantity', 0)),
-                                    step=1,
+                                    "수량",
+                                    min_value=0.0,
+                                    value=float(investment.get('purchase_quantity', 0)),
+                                    step=0.01,
                                     key=f"edit_quantity_{investment_id}"
                                 )
-                                
+                            
+                            with col2:
+                                edit_price = st.number_input(
+                                    "매입 가격",
+                                    min_value=0.0,
+                                    value=float(investment.get('purchase_price', 0)),
+                                    step=0.01,
+                                    key=f"edit_price_{investment_id}"
+                                )
+                            
+                            with col3:
+                                edit_current_price = st.number_input(
+                                    "현재 가격",
+                                    min_value=0.0,
+                                    value=float(investment.get('current_price', 0)),
+                                    step=0.01,
+                                    key=f"edit_current_price_{investment_id}"
+                                )
+                            
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
                                 edit_currency = st.selectbox(
                                     "통화",
-                                    ["KRW", "USD"],
-                                    index=["KRW", "USD"].index(
-                                        st.session_state.edit_investment.get('currency', 'KRW')
+                                    ["KRW", "USD", "EUR", "JPY", "CNY"],
+                                    index=["KRW", "USD", "EUR", "JPY", "CNY"].index(
+                                        investment.get('currency', 'KRW')
                                     ),
                                     key=f"edit_currency_{investment_id}"
                                 )
-                                
-                                edit_price = st.number_input(
-                                    f"매수가 ({edit_currency})",
-                                    min_value=0.0,
-                                    value=float(st.session_state.edit_investment.get('purchase_price', 0)),
-                                    step=0.01,
-                                    format="%0.2f",
-                                    key=f"edit_price_{investment_id}"
-                                )
-                                
-                                if edit_currency == "USD":
-                                    edit_purchase_exchange_rate = st.number_input(
-                                        "매입 시 환율 (USD/KRW)",
-                                        min_value=0.0,
-                                        value=float(st.session_state.edit_investment.get('purchase_exchange_rate', 1300.0)),
-                                        step=0.1,
-                                        format="%0.1f",
-                                        key=f"edit_purchase_exchange_rate_{investment_id}"
-                                    )
-                                    
-                                    edit_current_exchange_rate = st.number_input(
-                                        "현재 환율 (USD/KRW)",
-                                        min_value=0.0,
-                                        value=float(st.session_state.edit_investment.get('current_exchange_rate', 1300.0)),
-                                        step=0.1,
-                                        format="%0.1f",
-                                        key=f"edit_current_exchange_rate_{investment_id}"
-                                    )
-                                
-                                # 매입금액 표시
-                                edit_amount = st.number_input(
-                                    "매입금액",
-                                    min_value=0.0,
-                                    value=float(st.session_state.edit_investment.get('amount', 0)),
-                                    step=1000.0,
-                                    format="%0.2f",
-                                    key=f"edit_amount_{investment_id}"
-                                )
-                                
-                                # 평가금액 입력
-                                edit_current_amount = st.number_input(
-                                    "평가금액",
-                                    min_value=0.0,
-                                    value=float(st.session_state.edit_investment.get('current_amount', 0)),
-                                    step=1000.0,
-                                    format="%0.2f",
-                                    key=f"edit_current_amount_{investment_id}"
-                                )
-                                
-                                # 현재 평가금액 표시
-                                currency_symbol = "₩" if edit_currency == "KRW" else "$"
-                                st.caption(f"현재 평가금액: {currency_symbol}{edit_current_amount:,.2f}")
-                                
-                                edit_date = st.date_input(
-                                    "매수일",
-                                    value=datetime.strptime(
-                                        st.session_state.edit_investment['purchase_date'],
-                                        "%Y-%m-%d"
-                                    ),
-                                    key=f"edit_date_{investment_id}"
-                                )
-                                
-                                edit_memo = st.text_area(
-                                    "메모",
-                                    value=st.session_state.edit_investment.get('memo', ''),
-                                    key=f"edit_memo_{investment_id}"
-                                )
-                                
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    if st.form_submit_button("수정 완료"):
-                                        update_data = {
-                                            "type": edit_type,
-                                            "symbol": edit_symbol,
-                                            "name": edit_name,
-                                            "purchase_quantity": edit_quantity,
-                                            "purchase_price": edit_price,
-                                            "current_price": edit_price,  # 현재가도 업데이트
-                                            "currency": edit_currency,
-                                            "amount": edit_amount,
-                                            "current_amount": edit_current_amount,  # 평가금액 추가
-                                            "purchase_date": edit_date.strftime("%Y-%m-%d"),
-                                            "memo": edit_memo
-                                        }
-                                        
-                                        if edit_currency == "USD":
-                                            update_data.update({
-                                                "purchase_exchange_rate": edit_purchase_exchange_rate,
-                                                "current_exchange_rate": edit_current_exchange_rate
-                                            })
-                                        
-                                        if data_handler.update_investment(
-                                            st.session_state.edit_investment_id,
-                                            update_data
-                                        ):
-                                            st.success("✅ 투자 정보가 수정되었습니다.")
-                                            st.session_state.show_edit_form = False
-                                            st.rerun()
-                                        else:
-                                            st.error("❌ 투자 정보 수정에 실패했습니다.")
-                                
+                            
+                            if edit_currency != "KRW":
                                 with col2:
-                                    if st.form_submit_button("취소", type="secondary"):
+                                    edit_purchase_rate = st.number_input(
+                                        "매입 환율",
+                                        min_value=0.0,
+                                        value=float(investment.get('purchase_exchange_rate', 1300.0)),
+                                        step=0.01,
+                                        key=f"edit_purchase_rate_{investment_id}"
+                                    )
+                                
+                                with col3:
+                                    edit_current_rate = st.number_input(
+                                        "현재 환율",
+                                        min_value=0.0,
+                                        value=float(investment.get('current_exchange_rate', 1300.0)),
+                                        step=0.01,
+                                        key=f"edit_current_rate_{investment_id}"
+                                    )
+                            
+                            edit_date = st.date_input(
+                                "매입일",
+                                value=datetime.strptime(
+                                    investment['purchase_date'],
+                                    "%Y-%m-%d"
+                                ).date(),
+                                key=f"edit_date_{investment_id}"
+                            )
+                            
+                            edit_memo = st.text_area(
+                                "메모",
+                                value=investment.get('memo', ''),
+                                key=f"edit_memo_{investment_id}"
+                            )
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("💾 수정 완료"):
+                                    # 수정할 데이터 생성
+                                    update_data = {
+                                        "type": edit_type,
+                                        "name": edit_name,
+                                        "symbol": edit_symbol,
+                                        "purchase_quantity": edit_quantity,
+                                        "purchase_price": edit_price,
+                                        "current_price": edit_current_price,
+                                        "currency": edit_currency,
+                                        "amount": edit_quantity * edit_price,
+                                        "current_amount": edit_quantity * edit_current_price,
+                                        "purchase_date": edit_date.strftime("%Y-%m-%d"),
+                                        "memo": edit_memo
+                                    }
+                                    
+                                    if edit_currency != "KRW":
+                                        update_data.update({
+                                            "purchase_exchange_rate": edit_purchase_rate,
+                                            "current_exchange_rate": edit_current_rate
+                                        })
+                                    
+                                    if data_handler.update_investment(investment_id, update_data):
+                                        st.success("✅ 투자 정보가 수정되었습니다.")
                                         st.session_state.show_edit_form = False
                                         st.rerun()
-                        
-                        stock_data = get_stock_data(investment["symbol"])
-                        
-                        if stock_data is not None and not stock_data.empty and len(stock_data) > 1:
-                            col1, col2, col3, col4 = st.columns(4)
+                                    else:
+                                        st.error("❌ 투자 정보 수정에 실패했습니다.")
                             
-                            try:
-                                # 현재가 및 수익률 계산
-                                currency = investment.get('currency', 'KRW')
-                                investment_amount = float(investment.get('amount', 0))
-                                current_amount = float(investment.get('current_amount', investment_amount))
-                                
-                                # 수익률 계산
-                                if currency == "USD":
-                                    # USD 자산의 경우 원화 환산 수익률 계산
-                                    purchase_rate = float(investment.get('purchase_exchange_rate', 1300.0))
-                                    current_rate = float(investment.get('current_exchange_rate', 1300.0))
-                                    
-                                    # 원화 환산 금액
-                                    krw_investment = investment_amount * purchase_rate
-                                    krw_current = current_amount * current_rate
-                                    
-                                    # 원화 기준 수익률 계산
-                                    returns = ((krw_current - krw_investment) / krw_investment * 100) if krw_investment > 0 else 0
-                                    
-                                    # 표시할 금액과 환율 변동 효과
-                                    display_investment = investment_amount
-                                    display_current = current_amount
-                                    exchange_effect = ((current_rate - purchase_rate) / purchase_rate * 100) if purchase_rate > 0 else 0
-                                else:
-                                    # KRW 자산의 경우 단순 수익률 계산
-                                    returns = ((current_amount - investment_amount) / investment_amount * 100) if investment_amount > 0 else 0
-                                    display_investment = investment_amount
-                                    display_current = current_amount
-                                
-                                with col1:
-                                    currency_symbol = "₩" if currency == "KRW" else "$"
-                                    st.metric(
-                                        "💰 매입금액",
-                                        f"{currency_symbol}{display_investment:,.2f}",
-                                        help="투자 시점의 매입금액"
-                                    )
-                                with col2:
-                                    st.metric(
-                                        "💵 평가금액",
-                                        f"{currency_symbol}{display_current:,.2f}",
-                                        help="현재 평가금액"
-                                    )
-                                with col3:
-                                    st.metric(
-                                        "📈 수익률",
-                                        f"{returns:,.1f}%",
-                                        help="원화 기준 수익률" if currency == "USD" else "투자 수익률"
-                                    )
-                                if currency == "USD":
-                                    with col4:
-                                        st.metric(
-                                            "💱 현재 환율",
-                                            f"₩{current_rate:,.1f}",
-                                            f"{exchange_effect:+.1f}%",
-                                            help="환율 변동률"
-                                        )
-                                
-                                # 주가 차트 표시
-                                performance_chart = create_investment_performance_chart(
-                                    dates=stock_data.index,
-                                    performance=stock_data["Close"],
-                                    benchmark=None
-                                )
-                                st.plotly_chart(
-                                    performance_chart,
-                                    use_container_width=True
-                                )
-                            except (IndexError, KeyError) as e:
-                                st.warning(f"⚠️ {investment['name']}({investment['symbol']})의 주가 데이터를 처리하는 중 오류가 발생했습니다.")
-                        else:
-                            st.warning(f"⚠️ {investment['name']}({investment['symbol']})의 주가 데이터를 가져올 수 없습니다.")
-            else:
-                st.info("💡 주식 투자 내역이 없습니다.")
+                            with col2:
+                                if st.form_submit_button("❌ 취소"):
+                                    st.session_state.show_edit_form = False
+                                    st.rerun()
         else:
             st.info("💡 투자 데이터가 없습니다.")
     
@@ -621,3 +429,155 @@ def render_investments_page():
                     st.warning(f"⚠️ {name}({symbol})의 지수 데이터를 처리하는 중 오류가 발생했습니다.")
             else:
                 st.warning(f"⚠️ {name}({symbol})의 지수 데이터를 가져올 수 없습니다.")
+
+
+def render_investment_form():
+    """투자 정보 입력 폼 렌더링"""
+    with st.form("investment_form"):
+        st.subheader("📈 투자 정보 입력")
+        
+        # 첫 번째 행: 기본 정보
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            inv_type = st.selectbox(
+                "투자 유형",
+                [
+                    "주식", "채권", "펀드", "현금성",
+                    "대체투자", "Gold", "원자재", "기타"
+                ],
+                help="투자 자산의 유형을 선택하세요",
+                key="inv_type"
+            )
+        with col2:
+            name = st.text_input(
+                "상품명",
+                help="투자 상품의 이름을 입력하세요",
+                key="name"
+            )
+        with col3:
+            symbol = st.text_input(
+                "종목 코드(선택)",
+                help="주식/ETF의 경우 종목 코드를 입력하세요",
+                key="symbol"
+            )
+        
+        # 두 번째 행: 수량 및 가격 정보
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            quantity = st.number_input(
+                "수량",
+                min_value=0.0,
+                step=0.01,
+                help="매입 수량을 입력하세요",
+                key="quantity"
+            )
+        with col2:
+            price = st.number_input(
+                "매입 가격",
+                min_value=0.0,
+                step=0.01,
+                help="단위당 매입 가격을 입력하세요",
+                key="price"
+            )
+        with col3:
+            current_price = st.number_input(
+                "현재 가격",
+                min_value=0.0,
+                step=0.01,
+                help="현재 단위당 가격을 입력하세요",
+                key="current_price"
+            )
+        
+        # 세 번째 행: 통화 및 환율 정보
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            currency = st.selectbox(
+                "통화",
+                ["KRW", "USD", "EUR", "JPY", "CNY"],
+                help="자산의 거래 통화를 선택하세요",
+                key="currency"
+            )
+        with col2:
+            purchase_rate = st.number_input(
+                "매입 환율",
+                min_value=0.0,
+                step=0.01,
+                help="외화 자산인 경우 매입 시점의 환율을 입력하세요",
+                key="purchase_rate"
+            )
+        with col3:
+            current_rate = st.number_input(
+                "현재 환율",
+                min_value=0.0,
+                step=0.01,
+                help="외화 자산인 경우 현재 환율을 입력하세요",
+                key="current_rate"
+            )
+        
+        # 네 번째 행: 날짜 및 메모
+        col1, col2 = st.columns(2)
+        with col1:
+            purchase_date = st.date_input(
+                "매입일",
+                help="자산 매입 날짜를 선택하세요",
+                key="purchase_date"
+            )
+        with col2:
+            memo = st.text_input(
+                "메모",
+                help="투자와 관련된 메모를 입력하세요",
+                key="memo"
+            )
+        
+        # 계산된 정보 표시
+        if currency != "KRW" and quantity > 0 and price > 0:
+            total_amount = quantity * price
+            if purchase_rate > 0:
+                krw_amount = total_amount * purchase_rate
+                st.info(f"""
+                    💰 매입 금액: {total_amount:,.2f} {currency}
+                    원화 환산액: {krw_amount:,.0f} KRW
+                """)
+        
+        # 제출 버튼
+        submit = st.form_submit_button("저장")
+        
+        if submit:
+            if not name:
+                st.error("상품명은 필수입니다.")
+                return
+            
+            if quantity <= 0 or price <= 0:
+                st.error("수량과 가격은 0보다 커야 합니다.")
+                return
+            
+            if currency != "KRW" and purchase_rate <= 0:
+                st.error("외화 자산의 경우 매입 환율은 필수입니다.")
+                return
+            
+            # 투자 데이터 생성
+            investment_data = {
+                "type": inv_type,
+                "name": name,
+                "symbol": symbol,
+                "purchase_quantity": quantity,
+                "purchase_price": price,
+                "current_price": current_price or price,
+                "currency": currency,
+                "purchase_exchange_rate": purchase_rate if currency != "KRW" else None,
+                "current_exchange_rate": current_rate if currency != "KRW" else None,
+                "amount": quantity * price,
+                "current_amount": quantity * (current_price or price),
+                "purchase_date": purchase_date.isoformat(),
+                "memo": memo
+            }
+            
+            # 데이터 저장
+            if st.session_state.data_handler.save_investment(investment_data):
+                st.success("투자 정보가 저장되었습니다.")
+                # 폼 초기화
+                for key in st.session_state.keys():
+                    if key.startswith("inv_"):
+                        del st.session_state[key]
+            else:
+                st.error("저장 중 오류가 발생했습니다.")

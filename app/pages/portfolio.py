@@ -207,6 +207,13 @@ def calculate_investment_metrics(data: dict, exchange_rate: float) -> dict:
     }
 
 
+def calculate_krw_amount(amount: float, currency: str, exchange_rate: float) -> float:
+    """금액을 원화로 환산"""
+    if currency == "USD":
+        return amount * exchange_rate
+    return amount
+
+
 def render_portfolio_page():
     st.title("💼 포트폴리오 관리")
     
@@ -593,18 +600,28 @@ def render_portfolio_page():
                 orient='index'
             )
             
-            # 자산별 현재 비중 계산
-            total_value = investments_df['current_amount'].astype(float).sum()
-            current_weights = (
-                investments_df['current_amount'].astype(float) / total_value
-            )
+            # 자산별 현재 비중 계산 (원화 환산 기준)
+            total_krw_value = 0
+            krw_values = []
             
-            st.markdown("#### 현재 포트폴리오 구성")
+            for _, row in investments_df.iterrows():
+                current_amount = float(row.get('current_amount', row.get('amount', 0)))
+                currency = row.get('currency', 'KRW')
+                exchange_rate = float(row.get('current_exchange_rate', 1.0))
+                
+                # 원화로 환산
+                krw_value = calculate_krw_amount(current_amount, currency, exchange_rate)
+                krw_values.append(krw_value)
+                total_krw_value += krw_value
+            
+            # 원화 환산 비중 계산
+            current_weights = pd.Series(krw_values, index=investments_df.index) / total_krw_value
+            
+            st.markdown("#### 현재 포트폴리오 구성 (원화 환산 기준)")
             weights_df = pd.DataFrame({
                 '자산': investments_df['name'],
-                '현재 비중': current_weights.map(
-                    lambda x: f"{x*100:.1f}%"
-                )
+                '현재 비중': current_weights.map(lambda x: f"{x*100:.1f}%"),
+                '원화 환산 금액': [f"₩{v:,.0f}" for v in krw_values]
             })
             st.dataframe(weights_df)
             
@@ -716,7 +733,7 @@ def render_portfolio_page():
                                     diff = (opt_weight - current_w) * 100
                                     if abs(diff) >= 1:  # 1% 이상 차이나는 경우만 표시
                                         action = "매수" if diff > 0 else "매도"
-                                        amount = abs(diff) * total_value / 100
+                                        amount = abs(diff) * total_krw_value / 100
                                         st.write(
                                             f"- {asset}: {action} "
                                             f"₩{amount:,.0f} ({diff:+.1f}%)"
