@@ -565,25 +565,65 @@ def render_portfolio_page():
             # 리밸런싱 제안
             st.markdown("### ⚖️ 리밸런싱 제안")
             
-            # 리밸런싱이 필요한 항목 필터링
-            rebalance_needed = [
-                item for item in comparison_data
-                if abs(float(
-                    item["조정 필요"].strip("%").strip("+")
-                )) >= 5
-            ]
+            # 현재 자산 비중 계산
+            current_allocation = {}
+            for item in investment_data.values():
+                current_amount = float(item.get('current_amount', item.get('amount', 0)))
+                currency = item.get('currency', 'KRW')
+                inv_type = item.get('type', '기타')
+                
+                if currency == 'USD':
+                    # USD 자산의 경우 원화로 환산
+                    current_rate = float(item.get('current_exchange_rate', current_exchange_rate))
+                    krw_amount = current_amount * current_rate
+                else:
+                    krw_amount = current_amount
+                
+                current_allocation[inv_type] = current_allocation.get(inv_type, 0) + krw_amount
             
+            # 전체 포트폴리오 가치 계산
+            total_portfolio_value = sum(current_allocation.values())
+            
+            # 현재 비중을 퍼센트로 변환
+            if total_portfolio_value > 0:
+                for asset_type in current_allocation:
+                    current_allocation[asset_type] = (current_allocation[asset_type] / total_portfolio_value) * 100
+            
+            # 리밸런싱이 필요한 항목 필터링
+            rebalance_needed = []
+            for asset_type in asset_types:
+                current_weight = current_allocation.get(asset_type, 0)
+                target_weight = target_allocation.get(asset_type, 0)
+                diff = current_weight - target_weight
+                
+                rebalance_needed.append({
+                    "자산 유형": asset_type,
+                    "현재 비중": f"{current_weight:.1f}%",
+                    "목표 비중": f"{target_weight:.1f}%",
+                    "조정 필요": f"{diff:+.1f}%"
+                })
+            
+            # 리밸런싱 제안 표시
             if rebalance_needed:
+                rebalance_df = pd.DataFrame(rebalance_needed)
+                st.dataframe(
+                    rebalance_df.style.applymap(
+                        color_adjustment,
+                        subset=["조정 필요"]
+                    ),
+                    use_container_width=True
+                )
+                
+                st.markdown("#### 💰 금액 기준 리밸런싱 제안")
                 for item in rebalance_needed:
-                    diff = float(
-                        item["조정 필요"].strip("%").strip("+")
-                    )
-                    action = "매도" if diff > 0 else "매수"
-                    amount = abs(diff) * metrics["total"] / 100
-                    st.write(
-                        f"- {item['자산 유형']}: {action} "
-                        f"₩{amount:,.0f} ({diff:+.1f}%)"
-                    )
+                    diff = float(item["조정 필요"].strip("%").strip("+"))
+                    if abs(diff) >= 5:  # 5% 이상 차이나는 경우만 표시
+                        action = "매도" if diff > 0 else "매수"
+                        amount = abs(diff) * total_portfolio_value / 100
+                        st.write(
+                            f"- {item['자산 유형']}: {action} "
+                            f"₩{amount:,.0f} ({diff:+.1f}%)"
+                        )
             else:
                 st.info("포트폴리오 데이터가 없습니다.")
     
