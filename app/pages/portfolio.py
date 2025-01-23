@@ -502,6 +502,16 @@ def render_portfolio_page():
                 "대체투자": 2
             }
             
+            # 목표 자산 배분 (중립적 포트폴리오)
+            balanced = {
+                "주식": 45,
+                "채권": 30,
+                "현금성 자산": 10,
+                "부동산": 10,
+                "원자재": 3,
+                "대체투자": 2
+            }
+            
             # 목표 자산 배분 (공격적 포트폴리오)
             aggressive = {
                 "주식": 60,
@@ -515,13 +525,14 @@ def render_portfolio_page():
             # 포트폴리오 성향 선택
             portfolio_type = st.radio(
                 "포트폴리오 성향",
-                ["보수적", "공격적"],
+                ["보수적", "중립적", "공격적"],
                 horizontal=True,
                 help="원하는 포트폴리오 성향을 선택하세요"
             )
             
             target_allocation = (
                 conservative if portfolio_type == "보수적"
+                else balanced if portfolio_type == "중립적"
                 else aggressive
             )
             
