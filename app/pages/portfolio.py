@@ -530,7 +530,7 @@ def render_portfolio_page():
             for asset_type in asset_types:
                 current_weight = metrics["weights"].get(asset_type, 0)
                 target_weight = target_allocation.get(asset_type, 0)
-                diff = current_weight - target_weight
+                diff = target_weight - current_weight
                 
                 comparison_data.append({
                     "자산 유형": asset_type,
@@ -594,7 +594,7 @@ def render_portfolio_page():
             for asset_type in asset_types:
                 current_weight = current_allocation.get(asset_type, 0)
                 target_weight = target_allocation.get(asset_type, 0)
-                diff = current_weight - target_weight
+                diff = target_weight - current_weight
                 
                 rebalance_needed.append({
                     "자산 유형": asset_type,
@@ -618,7 +618,7 @@ def render_portfolio_page():
                 for item in rebalance_needed:
                     diff = float(item["조정 필요"].strip("%").strip("+"))
                     if abs(diff) >= 5:  # 5% 이상 차이나는 경우만 표시
-                        action = "매도" if diff > 0 else "매수"
+                        action = "매수" if diff > 0 else "매도"
                         amount = abs(diff) * total_portfolio_value / 100
                         st.write(
                             f"- {item['자산 유형']}: {action} "
