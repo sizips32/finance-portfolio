@@ -27,27 +27,47 @@ def get_stock_data(symbol: str, period: str = "1y") -> pd.DataFrame:
 
 
 def get_exchange_rate() -> float:
-    """USD/KRW 환율 정보 가져오기 (캐싱 적용)"""
+    """USD/KRW 환율 정보 가져오기 (캐싱 및 대체 소스 적용)"""
     # 세션 상태에 캐시된 환율이 있는지 확인
     if 'cached_exchange_rate' in st.session_state:
         cached_rate, cached_time = st.session_state.cached_exchange_rate
-        # 5분 이내의 캐시된 데이터라면 사용
-        if (datetime.now() - cached_time).seconds < 300:
+        # 10분 이내의 캐시된 데이터라면 사용 (캐시 시간 연장)
+        if (datetime.now() - cached_time).seconds < 600:
             return cached_rate
     
-    try:
-        usd_krw = yf.Ticker("KRW=X")
-        rate = usd_krw.history(period="1d")["Close"].iloc[-1]
-        
-        # 성공적으로 가져온 환율을 캐시에 저장
-        st.session_state.cached_exchange_rate = (rate, datetime.now())
-        return rate
-    except Exception as e:
-        st.warning(f"환율 데이터 조회 실패: {e}")
-        # 캐시된 데이터가 있으면 사용, 없으면 기본값 반환
-        if 'cached_exchange_rate' in st.session_state:
-            return st.session_state.cached_exchange_rate[0]
-        return 1300.0  # 기본값
+    # 여러 데이터 소스 시도
+    data_sources = [
+        ("KRW=X", "Yahoo Finance"),
+        ("USDKRW=X", "Yahoo Finance Alternative"),
+        ("KRWUSD=X", "Yahoo Finance Reverse")
+    ]
+    
+    for symbol, source_name in data_sources:
+        try:
+            usd_krw = yf.Ticker(symbol)
+            hist = usd_krw.history(period="1d")
+            
+            if not hist.empty:
+                if symbol == "KRWUSD=X":
+                    # 역환율인 경우 역수 계산
+                    rate = 1 / hist["Close"].iloc[-1]
+                else:
+                    rate = hist["Close"].iloc[-1]
+                
+                # 성공적으로 가져온 환율을 캐시에 저장
+                st.session_state.cached_exchange_rate = (rate, datetime.now())
+                return rate
+                
+        except Exception as e:
+            continue  # 다음 데이터 소스 시도
+    
+    # 모든 데이터 소스가 실패한 경우
+    st.warning("환율 데이터 조회에 실패했습니다. 캐시된 데이터 또는 기본값을 사용합니다.")
+    
+    # 캐시된 데이터가 있으면 사용, 없으면 기본값 반환
+    if 'cached_exchange_rate' in st.session_state:
+        return st.session_state.cached_exchange_rate[0]
+    return 1300.0  # 기본값
 
 
 def render_investments_page():
