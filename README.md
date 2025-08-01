@@ -1,4 +1,3 @@
-# Personal Finance Portfolio Web App
 
 ## 개요
 
