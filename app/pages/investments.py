@@ -27,14 +27,27 @@ def get_stock_data(symbol: str, period: str = "1y") -> pd.DataFrame:
 
 
 def get_exchange_rate() -> float:
-    """USD/KRW 환율 정보 가져오기"""
+    """USD/KRW 환율 정보 가져오기 (캐싱 적용)"""
+    # 세션 상태에 캐시된 환율이 있는지 확인
+    if 'cached_exchange_rate' in st.session_state:
+        cached_rate, cached_time = st.session_state.cached_exchange_rate
+        # 5분 이내의 캐시된 데이터라면 사용
+        if (datetime.now() - cached_time).seconds < 300:
+            return cached_rate
+    
     try:
         usd_krw = yf.Ticker("KRW=X")
         rate = usd_krw.history(period="1d")["Close"].iloc[-1]
+        
+        # 성공적으로 가져온 환율을 캐시에 저장
+        st.session_state.cached_exchange_rate = (rate, datetime.now())
         return rate
     except Exception as e:
-        st.error(f"환율 데이터 조회 실패: {e}")
-        return None
+        st.warning(f"환율 데이터 조회 실패: {e}")
+        # 캐시된 데이터가 있으면 사용, 없으면 기본값 반환
+        if 'cached_exchange_rate' in st.session_state:
+            return st.session_state.cached_exchange_rate[0]
+        return 1300.0  # 기본값
 
 
 def render_investments_page():

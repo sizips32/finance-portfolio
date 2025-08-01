@@ -15,13 +15,26 @@ from utils.visualization import create_pie_chart
 
 
 def get_current_exchange_rate() -> float:
-    """현재 USD/KRW 환율 정보 가져오기"""
+    """현재 USD/KRW 환율 정보 가져오기 (캐싱 적용)"""
+    # 세션 상태에 캐시된 환율이 있는지 확인
+    if 'cached_exchange_rate' in st.session_state:
+        cached_rate, cached_time = st.session_state.cached_exchange_rate
+        # 5분 이내의 캐시된 데이터라면 사용
+        if (datetime.now() - cached_time).seconds < 300:
+            return cached_rate
+    
     try:
         usd_krw = yf.Ticker("KRW=X")
         current_rate = usd_krw.history(period="1d")['Close'].iloc[-1]
+        
+        # 성공적으로 가져온 환율을 캐시에 저장
+        st.session_state.cached_exchange_rate = (current_rate, datetime.now())
         return current_rate
     except Exception as e:
-        st.error(f"환율 데이터 조회 실패: {e}")
+        st.warning(f"환율 데이터 조회 실패: {e}")
+        # 캐시된 데이터가 있으면 사용, 없으면 기본값 반환
+        if 'cached_exchange_rate' in st.session_state:
+            return st.session_state.cached_exchange_rate[0]
         return 1300.0  # 기본값
 
 
@@ -506,7 +519,7 @@ def render_portfolio_page():
                     return ''
             
             # 스타일이 적용된 데이터프레임 표시
-            styled_df = investment_df.style.applymap(
+            styled_df = investment_df.style.map(
                 style_negative_profits,
                 subset=['수익률']
             )
@@ -589,7 +602,7 @@ def render_portfolio_page():
             
             # 스타일이 적용된 데이터프레임 표시
             st.dataframe(
-                comparison_df.style.applymap(
+                comparison_df.style.map(
                     color_adjustment,
                     subset=["조정 필요"]
                 ),
@@ -641,7 +654,7 @@ def render_portfolio_page():
             if rebalance_needed:
                 rebalance_df = pd.DataFrame(rebalance_needed)
                 st.dataframe(
-                    rebalance_df.style.applymap(
+                    rebalance_df.style.map(
                         color_adjustment,
                         subset=["조정 필요"]
                     ),
@@ -720,9 +733,9 @@ def render_portfolio_page():
             
             target_return = st.slider(
                 "목표 연간 수익률",
-                min_value=float(min_return * 100),  # 최소 가능 수익률
-                max_value=float(max_return * 100),  # 최대 가능 수익률
-                value=float((min_return + max_return) * 50),  # 중간값으로 기본값 설정
+                min_value=0.0,
+                max_value=30.0,
+                value=10.0,
                 step=0.5,
                 help="원하는 연간 목표 수익률을 설정하세요"
             ) / 100
